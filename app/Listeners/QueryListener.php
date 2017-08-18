@@ -1,0 +1,72 @@
+<?php
+namespace App\Listeners;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\Log;
+use DateTime;
+class QueryListener
+{
+
+    protected static $sessionId = false;
+
+    /**
+     * Create the event listener.
+     *
+     * @return void
+     */
+    public function __construct()
+    {
+        //
+    }
+
+    public static function getCode(){
+        $rand   = time() . getmypid() . rand(100000, 999999) . rand(100000, 999999);
+        $str    = md5($rand);
+        return  strtoupper(substr($str, 0, 8));
+    }
+
+    /**
+     * 八位大写的随机数字
+     *
+     */
+    public static function getSession(){
+        if(self::$sessionId === false){
+            self::$sessionId = self::getCode();
+        }
+        return self::$sessionId;
+    }
+    
+    /**
+     * Handle the event.
+     *
+     * @param  QueryExecuted $event
+     * @return void
+     */
+    public function handle(QueryExecuted $sql)
+    {
+
+        foreach ($sql->bindings as $i => $binding) {
+            if ($binding instanceof \DateTime) {
+                $sql->bindings[$i] = $binding->format('\'Y-m-d H:i:s\'');
+            } else {
+                if (is_string($binding)) {
+                    $sql->bindings[$i] = "'$binding'";
+                }
+            }
+        }
+
+        // Insert bindings into query
+        $query = str_replace(array('%', '?'), array('%%', '%s'), $sql->sql);
+
+        $query = vsprintf($query, $sql->bindings);
+
+        // Save the query to file
+        $logFile = fopen(
+            storage_path('logs' . DIRECTORY_SEPARATOR . 'query_' . date('Y-m-d') . '.log'),
+            'a+'
+        );
+        fwrite($logFile, date('Y-m-d H:i:s') . ': ' . $query . PHP_EOL);
+        fclose($logFile);
+
+
+    }
+}
